@@ -17,5 +17,39 @@ services:
       timeout: 5s
       retries: 10
 
+  # docker compose --profile app up --build : migrate runs once, then the API starts
+  migrate:
+    profiles: [app]
+    build: .
+    image: nest-boilerplate:local
+    command: ['node', 'node_modules/typeorm/cli.js', 'migration:run', '-d', 'dist/database/data-source.js']
+    env_file: .env
+    environment:
+      DATABASE_HOST: postgres
+      DATABASE_PORT: 5432
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  app:
+    profiles: [app]
+    image: nest-boilerplate:local
+    init: true
+    env_file: .env
+    environment:
+      APP_PORT: 3000
+      DATABASE_HOST: postgres
+      DATABASE_PORT: 5432
+    ports:
+      - '${APP_PORT:-3000}:3000'
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ['CMD', 'node', '-e', "fetch('http://localhost:3000/api/health/ready').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
 volumes:
   postgres-data:
